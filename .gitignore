@@ -1,0 +1,6 @@
+# Exclude out/ folder:
+out/
+
+# Debugging purposes:
+dummy.json
+todo.md
