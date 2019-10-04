@@ -53,6 +53,10 @@ class GistCrawler {
         return self::$userDirectory;
     }
 
+    private static function batchDownload(array $rawUrl) : void {
+
+    }
+
     /**
      * Private method to fetch given username's gist data
      * and return it as decoded JSON.
@@ -76,21 +80,30 @@ class GistCrawler {
         $retVal = curl_exec($ch);
         curl_close($ch);
         
-        return json_decode($retVal, true, 512, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY);
+        return json_decode($retVal, true, 0x200, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY);
     }
 
     /**
      * Fetch all user's gists.
      */
     private static function fetchGists() : void {
+        $downloadedSize = 0;
+        $downloadedFiles = 0;
+        $elapsedTimes = [];
+        $startTime = microtime(true);
         foreach (self::$data as $gist) {
             if (!isset($gist["files"]) && !(count($gist["files"]) > 0))
                 break;
 
             $subDir = "";
+            $timeEachFile = microtime(true);
             foreach (array_keys($gist["files"]) as $fileName) {
                 if ($subDir === "") {
-                    $subDir = self::getUserDirectory() . substr($fileName, 0, stripos($fileName, ".")) . "\x2f";
+                    if (stripos($fileName, ".") !== false) {
+                        $subDir = self::getUserDirectory() . substr($fileName, 0, stripos($fileName, ".")) . "\x2f";
+                    } else {
+                        $subDir = self::getUserDirectory() . $fileName . "\x2f";
+                    }
                     @mkdir($subDir);
                 }
 
@@ -98,13 +111,30 @@ class GistCrawler {
                 // TODO: Take 10 content (or optional) and write it, repeat.
                 $fileName = $gist["files"][$fileName]["filename"];
                 $contentUrl = $gist["files"][$fileName]["raw_url"];
+                $downloadedSize += (int) $gist["files"][$fileName]["size"];
                 $content = file_get_contents($contentUrl);
 
                 $file = @fopen($subDir . $fileName, "w+");
                 fwrite($file, $content);
                 fclose($file);
+
+                $elapsedTimes[$downloadedFiles] = (microtime(true) - $timeEachFile) * 1000;
+                ++$downloadedFiles;
+                echo "[!] Downloaded file(s): $downloadedFiles" . PHP_EOL;
+                $timeEachFile = microtime(true);
             }
         }
+
+        echo "[*] Downloaded files: $downloadedFiles" . PHP_EOL;
+        /**
+         * The only way to make it better is using cache / local file validation.
+         * If file exists and has the same size, skip it!
+         * 
+         * That's what I had on my head for a moment.
+         */
+        var_dump($elapsedTimes);
+        echo "[*] Download size: $downloadedSize Bytes" . PHP_EOL;
+        echo "[*] Total time: " . ((microtime(true) - $startTime) * 1000) . "ms" . PHP_EOL;
     }
 
     /**
@@ -123,6 +153,10 @@ class GistCrawler {
             self::$username = $username;
             self::$userDirectory = "\x6f\x75\x74\x2f" . $username . "\x2f";
             self::$data = self::fetchData();
+
+            if ($execute) {
+                self::fetchGists();
+            }
 
             return true;
         }

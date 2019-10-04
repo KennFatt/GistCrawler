@@ -73,6 +73,9 @@ function validateUsername(string $username) : bool {
 
 /**
  * Strip the filename ($argv[0]) from $argv.
+ * Since we reverse the array and new produced array are look like this:
+ *  0 = options
+ *  1 = username
  * 
  * @param array $args
  * 
@@ -100,7 +103,7 @@ function parseArgs(array $args) : ?array {
         ));
 
         consoleOut(
-            "Available options:
+            "\tAvailable options:
             \timport\t: Import all the gists
             \traw\t: Take raw json response\n"
         );
@@ -121,22 +124,24 @@ function parseArgs(array $args) : ?array {
         return false;
     };
 
-    if (count($args) === 0) {
+    if (count($args) !== 2) {
         $interface();
         programExit();
     }
 
-    if (!validateUsername($args[0])) {
+    if (!validateUsername($args[1])) {
         programExit("Invalid github username.", ERR_INVALID_USERNAME);
     }
     
-    switch(strtolower($args[1])) {
+    switch(strtolower($args[0])) {
         case "import":
+            GistCrawler::initialize($args[1], true); // TODO: Debug code.
             break;
         case "raw":
             break;
         default:
-            programExit();
+            $interface();
+            programExit("Invalid options given.", ERR_INVALID_OPTIONS);
             break;
     }
 })($argv);
