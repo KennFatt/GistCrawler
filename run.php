@@ -4,9 +4,24 @@ declare(strict_types=1);
 
 require './src/GistCrawler.php';
 
+/**
+ * Used to indicate invalid given username.
+ * 
+ * @var int ERR_INVALID_USERNAME
+ */
 define("ERR_INVALID_USERNAME", 0x03);
+/**
+ * Used to indicate invalid given options.
+ * 
+ * @var int ERR_INVALID_OPTIONS
+ */
 define("ERR_INVALID_OPTIONS", 0x05);
 
+/**
+ * Write a message to STDOUT.
+ * 
+ * @param string $message
+ */
 function consoleOut(string $message) : void {
     fwrite(
         STDOUT,
@@ -14,10 +29,21 @@ function consoleOut(string $message) : void {
     );
 }
 
+/**
+ * Read a buffer from STDIN.
+ * 
+ * @return string
+ */
 function consoleIn() : string {
     return trim(((string) fgets(STDIN)));
 }
 
+/**
+ * Exit the program with optional $exitMsg and $exitCode
+ * 
+ * @param string|null $exitMSG
+ * @param int $exitCode
+ */
 function programExit(?string $exitMsg = NULL, int $exitCode = 0) : void {
     if ($exitMsg !== NULL) {
         consoleOut("[$exitCode] " . $exitMsg);
@@ -26,6 +52,15 @@ function programExit(?string $exitMsg = NULL, int $exitCode = 0) : void {
     exit($exitCode);
 }
 
+/**
+ * Validate GitHub username.
+ * 
+ * @link https://github.com/shinnn/github-username-regex Regex pattern.
+ * 
+ * @param string $username
+ * 
+ * @return bool
+ */
 function validateUsername(string $username) : bool {
     if  (
         stripos($username, "about") !== false ||
@@ -33,12 +68,16 @@ function validateUsername(string $username) : bool {
         stripos($username, "pricing") !== false
     ) return false;
 
-    /**
-     * Regex pattern: https://github.com/shinnn/github-username-regex
-     */
     return preg_match("/^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i", $username) === 1;
 }
 
+/**
+ * Strip the filename ($argv[0]) from $argv.
+ * 
+ * @param array $args
+ * 
+ * @return array|null
+ */
 function parseArgs(array $args) : ?array {
     if (count($args) === 1)
         return NULL;
@@ -48,7 +87,7 @@ function parseArgs(array $args) : ?array {
     return $retVal;
 }
 
-function main(array $args) : void {
+(function(array $args) : void {
     $args = parseArgs($args) ?? [];
 
     if (count($args) === 0) {
@@ -72,6 +111,4 @@ function main(array $args) : void {
     if (GistCrawler::initialize($args[0])) {
         
     }
-}
-
-main($argv);
+})($argv);

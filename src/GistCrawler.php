@@ -18,6 +18,13 @@ class GistCrawler {
      * @var bool $initialized
      */
     private static $initialized = false;
+
+    /**
+     * User out directory.
+     * 
+     * @var string $userDirectory
+     */
+    private static $userDirectory = "";
     
     /**
      * Given GitHub username to fetch.
@@ -33,17 +40,21 @@ class GistCrawler {
      */
     private static $data;
 
-    private static function initOutDirectory() : string {
-        /**
-         * Suppress the mkdir and recursively include username's folder.
-         */
-        $dirGenerate = "\x6f\x75\x74\x2f" . self::$username . "\x2f";
-        @mkdir($dirGenerate, 0777, true);
-        return $dirGenerate;
+    /**
+     * Create new user's directory if not exists.
+     * 
+     * @return string
+     */
+    private static function getUserDirectory() : string {
+        if (!is_dir(self::$userDirectory)) {
+            mkdir(self::$userDirectory, 0777, true);
+        }
+
+        return self::$userDirectory;
     }
 
     /**
-     * Inner method to fetch given username's gist data
+     * Private method to fetch given username's gist data
      * and return it as decoded JSON.
      * 
      * @api https://api.github.com/users/:username/gists
@@ -68,33 +79,29 @@ class GistCrawler {
         return json_decode($retVal, true, 512, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY);
     }
 
+    /**
+     * Fetch all user's gists.
+     */
     private static function fetchGists() : void {
-        $userDirectory = self::initOutDirectory();
-        $unknownProps = 0;
-
         foreach (self::$data as $gist) {
-            if (isset($gist["files"]) && count($gist["files"]) > 0) {
-                // var_dump($gist["files"]);
-                $subDir = "";
+            if (!isset($gist["files"]) && !(count($gist["files"]) > 0))
+                break;
 
-                foreach (array_keys($gist["files"]) as $fileName) {
-                    if ($subDir === "") {
-                        $subDir = $userDirectory . str_replace(".", "_", $fileName) . "\x2f";
-                        mkdir($subDir);
-                    }
-
-                    $fileName = $gist["files"][$fileName]["filename"];
-                    $contentUrl = $gist["files"][$fileName]["raw_url"];
-                    $content = file_get_contents($contentUrl);
-
-                    $file = @fopen($subDir . $fileName, "w+");
-                    fwrite($file, $content);
-                    fclose($file);
+            $subDir = "";
+            foreach (array_keys($gist["files"]) as $fileName) {
+                if ($subDir === "") {
+                    $subDir = self::getUserDirectory() . substr($fileName, 0, stripos($fileName, ".")) . "\x2f";
+                    @mkdir($subDir);
                 }
 
-            } // Safe guard.
+                $fileName = $gist["files"][$fileName]["filename"];
+                $contentUrl = $gist["files"][$fileName]["raw_url"];
+                $content = file_get_contents($contentUrl);
 
-            ++$unknownProps;
+                $file = @fopen($subDir . $fileName, "w+");
+                fwrite($file, $content);
+                fclose($file);
+            }
         }
     }
 
@@ -109,9 +116,8 @@ class GistCrawler {
             self::$initialized = true;
 
             self::$username = $username;
+            self::$userDirectory = "\x6f\x75\x74\x2f" . $username . "\x2f";
             self::$data = self::fetchData();
-
-            // self::fetchGists();
 
             return true;
         }
