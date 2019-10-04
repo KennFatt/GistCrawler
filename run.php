@@ -90,16 +90,39 @@ function parseArgs(array $args) : ?array {
 (function(array $args) : void {
     $args = parseArgs($args) ?? [];
 
-    if (count($args) === 0) {
+    /**
+     * Show main interface.
+     */
+    $interface = function() : void {
         consoleOut(pack(
             "\x48\x2A",
             "e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e294800a09090947697374437261776c6572202d2076312e300a0955736167653a2072756e2e706870205b537472696e673a20757365726e616d655d205b4f7074696f6e732e2e2e5d0ae29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e29480e294800a"
         ));
 
         consoleOut(
-            "Available option(s):\n\timport\t: Import all the gists\n\traw\t: Take raw json response\n"
+            "Available options:
+            \timport\t: Import all the gists
+            \traw\t: Take raw json response\n"
         );
+    };
 
+    /**
+     * Closure to execute crawl process.
+     * Mode:
+     *  0 IMPORT
+     *  1 JSON_RESPONSE
+     * 
+     * @param string $username
+     * @param int $mode 0 or 1
+     * 
+     * @return bool
+     */
+    $crawling = function(string $username, int $mode) : bool {
+        return false;
+    };
+
+    if (count($args) === 0) {
+        $interface();
         programExit();
     }
 
@@ -107,8 +130,13 @@ function parseArgs(array $args) : ?array {
         programExit("Invalid github username.", ERR_INVALID_USERNAME);
     }
     
-    // Execute!
-    if (GistCrawler::initialize($args[0])) {
-        
+    switch(strtolower($args[1])) {
+        case "import":
+            break;
+        case "raw":
+            break;
+        default:
+            programExit();
+            break;
     }
 })($argv);

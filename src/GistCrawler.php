@@ -38,7 +38,7 @@ class GistCrawler {
      * 
      * @var array|null $data
      */
-    private static $data;
+    private static $data = NULL;
 
     /**
      * Create new user's directory if not exists.
@@ -94,6 +94,8 @@ class GistCrawler {
                     @mkdir($subDir);
                 }
 
+                // TODO: Remove boilerplate
+                // TODO: Take 10 content (or optional) and write it, repeat.
                 $fileName = $gist["files"][$fileName]["filename"];
                 $contentUrl = $gist["files"][$fileName]["raw_url"];
                 $content = file_get_contents($contentUrl);
@@ -109,9 +111,12 @@ class GistCrawler {
      * First step to use the GistCrawler class.
      * Initialize username and state.
      * 
+     * @param string $username
+     * @param bool $execute TODO
+     * 
      * @return bool
      */
-    public static function initialize(string $username) : bool {
+    public static function initialize(string $username, bool $execute) : bool {
         if (!self::$initialized) {
             self::$initialized = true;
 
