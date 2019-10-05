@@ -77,10 +77,20 @@ class GistCrawler {
             CURLOPT_HEADER => 0x00
         ]);
 
-        $retVal = curl_exec($ch);
+        $chRes = curl_exec($ch);
         curl_close($ch);
+
+        $retVal = [];
+        if ((is_string($chRes)) && (strlen($chRes) > 2)) {
+            $json = json_decode($chRes, true, 0x200, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY);
+            if (is_array($json)) {
+                foreach ($json as $k => $datum) {
+                    $retVal[] = $datum["files"];
+                }
+            }
+        }
         
-        return json_decode($retVal, true, 0x200, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY);
+        return $retVal;
     }
 
     /**
