@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require './src/GistCrawler.php';
+require './src/Benchmark.php';
 
 /**
  * Used to indicate invalid given username.

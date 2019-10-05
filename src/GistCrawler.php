@@ -38,7 +38,7 @@ class GistCrawler {
      * 
      * @var array|null $data
      */
-    private static $data = NULL;
+    private static $files = NULL;
 
     /**
      * Create new user's directory if not exists.
@@ -84,8 +84,12 @@ class GistCrawler {
         if ((is_string($chRes)) && (strlen($chRes) > 2)) {
             $json = json_decode($chRes, true, 0x200, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY);
             if (is_array($json)) {
-                foreach ($json as $k => $datum) {
-                    $retVal[] = $datum["files"];
+                for ($i = 0; $i < count($json); ++$i) {
+                    $identifiedFiles = array_keys($json[$i]["files"]);
+
+                    for ($j = 0; $j < count($identifiedFiles); ++$j) {
+                        $retVal[$identifiedFiles[$j]] = $json[$i]["files"][$identifiedFiles[$j]];
+                    }
                 }
             }
         }
@@ -97,54 +101,20 @@ class GistCrawler {
      * Fetch all user's gists.
      */
     private static function fetchGists() : void {
-        $downloadedSize = 0;
-        $downloadedFiles = 0;
-        $elapsedTimes = [];
-        $startTime = microtime(true);
-        foreach (self::$data as $gist) {
-            if (!isset($gist["files"]) && !(count($gist["files"]) > 0))
-                break;
+        // TODO: Implement Benchmark for debugging purpose.
+        Benchmark::initialize([
+            "sizes" => 0,
+            "files" => 0,
+            "elapsed" => [],
+            "start_time" => microtime(true)
+        ]);
 
-            $subDir = "";
-            $timeEachFile = microtime(true);
-            foreach (array_keys($gist["files"]) as $fileName) {
-                if ($subDir === "") {
-                    if (stripos($fileName, ".") !== false) {
-                        $subDir = self::getUserDirectory() . substr($fileName, 0, stripos($fileName, ".")) . "\x2f";
-                    } else {
-                        $subDir = self::getUserDirectory() . $fileName . "\x2f";
-                    }
-                    @mkdir($subDir);
-                }
+        if (self::$files === [])
+            return; // No gists at all!
 
-                // TODO: Remove boilerplate
-                // TODO: Take 10 content (or optional) and write it, repeat.
-                $fileName = $gist["files"][$fileName]["filename"];
-                $contentUrl = $gist["files"][$fileName]["raw_url"];
-                $downloadedSize += (int) $gist["files"][$fileName]["size"];
-                $content = file_get_contents($contentUrl);
-
-                $file = @fopen($subDir . $fileName, "w+");
-                fwrite($file, $content);
-                fclose($file);
-
-                $elapsedTimes[$downloadedFiles] = (microtime(true) - $timeEachFile) * 1000;
-                ++$downloadedFiles;
-                echo "[!] Downloaded file(s): $downloadedFiles" . PHP_EOL;
-                $timeEachFile = microtime(true);
-            }
+        foreach (self::$files as $fileName => $fileProps) {
+            // TODO
         }
-
-        echo "[*] Downloaded files: $downloadedFiles" . PHP_EOL;
-        /**
-         * The only way to make it better is using cache / local file validation.
-         * If file exists and has the same size, skip it!
-         * 
-         * That's what I had on my head for a moment.
-         */
-        var_dump($elapsedTimes);
-        echo "[*] Download size: $downloadedSize Bytes" . PHP_EOL;
-        echo "[*] Total time: " . ((microtime(true) - $startTime) * 1000) . "ms" . PHP_EOL;
     }
 
     /**
@@ -162,7 +132,7 @@ class GistCrawler {
 
             self::$username = $username;
             self::$userDirectory = "\x6f\x75\x74\x2f" . $username . "\x2f";
-            self::$data = self::fetchData();
+            self::$files = self::fetchData();
 
             if ($execute) {
                 self::fetchGists();
@@ -180,7 +150,7 @@ class GistCrawler {
      * @return array|null
      */
     public static function getGists() : ?array {
-        return self::$data ?? NULL;
+        return self::$files ?? NULL;
     }
 
     /**
@@ -189,8 +159,8 @@ class GistCrawler {
      * @return string|null
      */
     public static function getGistsJson() : ?string {
-        return is_array(self::$data)
-            ? json_encode(self::$data, JSON_PRETTY_PRINT)
+        return is_array(self::$files)
+            ? json_encode(self::$files, JSON_PRETTY_PRINT)
             : NULL;
     }
 
@@ -200,6 +170,6 @@ class GistCrawler {
      * @return int
      */
     public static function getCountGist() : int {
-        return count(self::$data);
+        return count(self::$files);
     }
 }
