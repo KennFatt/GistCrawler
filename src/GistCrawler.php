@@ -34,11 +34,25 @@ class GistCrawler {
     private static $username = "";
 
     /**
+     * List of options to filter importing process.
+     * 
+     * @var array $filterOptions
+     */
+    private static $filterOptions = [];
+
+    /**
      * Final fetch data.
      * 
      * @var array|null $data
      */
     private static $files = NULL;
+
+    /**
+     * Fetch main Gist API and store it as PHP's array.
+     * 
+     * @var array|null $data
+     */
+    private static $data = NULL;
 
     /**
      * Create new user's directory if not exists.
@@ -53,8 +67,60 @@ class GistCrawler {
         return self::$userDirectory;
     }
 
-    private static function batchDownload(array $rawUrl) : void {
+    /**
+     * Classifying the data and make it as object.
+     * Return type:
+     *  [
+     *      string => Files[]
+     *      ...
+     *  ]
+     * 
+     * @see Files
+     * 
+     * @return array|null
+     */
+    private static function classifyFiles() : ?array {
+        if (self::$data === null)
+            return null;
+        
+        $files = [];
+        $headIndex = null;
+        for ($i = 0; $i < count(self::$data); ++$i) {
+            foreach (self::$data[$i]["files"] as $index => $fileProps) {
+                if ($headIndex === null)
+                    $headIndex = $index;
 
+                $files[$headIndex][] = new Files($fileProps);
+            }
+            $headIndex = null;
+        }
+        
+        return $files;
+    }
+
+    /**
+     * Execute process.
+     * 
+     * @param int $mode 0 for raw json and 1 import option.
+     */
+    private static function execute(int $mode) {
+        switch ($mode) {
+            case 0:
+                /**
+                 * It would write "null" if the data itself has null value.
+                 * Note that we use `fwrite` to STDOUT. So we can control the output in CLI.
+                 *  Example: php run.php kennfatt raw > kennfatt.json
+                 */
+                fwrite(STDOUT, json_encode(
+                    self::$data, 
+                    JSON_PRETTY_PRINT | JSON_UNESCAPED_LINE_TERMINATORS | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ));
+            break;
+
+            case 1:
+                // TODO
+            break;
+        }
     }
 
     /**
@@ -77,44 +143,12 @@ class GistCrawler {
             CURLOPT_HEADER => 0x00
         ]);
 
-        $chRes = curl_exec($ch);
+        $jsonResponse = curl_exec($ch);
         curl_close($ch);
-
-        $retVal = [];
-        if ((is_string($chRes)) && (strlen($chRes) > 2)) {
-            $json = json_decode($chRes, true, 0x200, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY);
-            if (is_array($json)) {
-                for ($i = 0; $i < count($json); ++$i) {
-                    $identifiedFiles = array_keys($json[$i]["files"]);
-
-                    for ($j = 0; $j < count($identifiedFiles); ++$j) {
-                        $retVal[$identifiedFiles[$j]] = $json[$i]["files"][$identifiedFiles[$j]];
-                    }
-                }
-            }
-        }
         
-        return $retVal;
-    }
-
-    /**
-     * Fetch all user's gists.
-     */
-    private static function fetchGists() : void {
-        // TODO: Implement Benchmark for debugging purpose.
-        Benchmark::initialize([
-            "sizes" => 0,
-            "files" => 0,
-            "elapsed" => [],
-            "start_time" => microtime(true)
-        ]);
-
-        if (self::$files === [])
-            return; // No gists at all!
-
-        foreach (self::$files as $fileName => $fileProps) {
-            // TODO
-        }
+        return is_string($jsonResponse) 
+            ? json_decode($jsonResponse, true, 0x200, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY)
+            : [];
     }
 
     /**
@@ -122,21 +156,24 @@ class GistCrawler {
      * Initialize username and state.
      * 
      * @param string $username
-     * @param bool $execute TODO
+     * @param bool $import
      * 
      * @return bool
      */
-    public static function initialize(string $username, bool $execute) : bool {
+    public static function initialize(string $username, bool $import, array $opt = []) : bool {
         if (!self::$initialized) {
             self::$initialized = true;
 
             self::$username = $username;
             self::$userDirectory = "\x6f\x75\x74\x2f" . $username . "\x2f";
-            self::$files = self::fetchData();
+            self::$data = self::fetchData();
 
-            if ($execute) {
-                self::fetchGists();
+            if ($import && $opt !== []) {
+                self::$filterOptions["type"]        = $opt["type"] ?? "*";
+                self::$filterOptions["languages"]   = $opt["languages"] ?? ["*"];
+                self::$filterOptions["max_size"]    = $opt["max_size"] ?? (10 ** 6);
             }
+            self::execute((int) $import);
 
             return true;
         }

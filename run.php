@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require './src/GistCrawler.php';
 require './src/Benchmark.php';
+require './src/Files.php';
 
 /**
  * Used to indicate invalid given username.
@@ -26,7 +27,7 @@ define("ERR_INVALID_OPTIONS", 0x05);
 function consoleOut(string $message) : void {
     fwrite(
         STDOUT,
-        ord($message[strlen($message) - 1]) !== 10 ? $message . "\n" : $message
+        ord($message[strlen($message) - 1]) !== 10 ? $message . "\x2f" : $message
     );
 }
 
@@ -136,13 +137,16 @@ function parseArgs(array $args) : ?array {
     
     switch(strtolower($args[0])) {
         case "import":
-            GistCrawler::initialize($args[1], true); // TODO: Debug code.
+            GistCrawler::initialize($args[1], true);
             break;
         case "raw":
+            GistCrawler::initialize($args[1], false);
             break;
         default:
             $interface();
             programExit("Invalid options given.", ERR_INVALID_OPTIONS);
             break;
     }
+
+    programExit();
 })($argv);
