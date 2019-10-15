@@ -5,6 +5,27 @@ declare(strict_types=1);
 require './src/GistCrawler.php';
 require './src/Benchmark.php';
 require './src/Files.php';
+/**
+ * TODO
+ * @var array $filterOptions = [
+ *     "type" => string,
+ *     "language" => string,
+ *     "size" => int
+ * ]
+ */
+$filterOptions = [];
+
+/**
+ * TODO
+ * @var array $callbacks = [
+ *     "onInitialize" => function(["username" => string, "import_mode" => bool, "filter_options" => array]) {},
+ *     "onFetched" => function(["response" => mixed]) {},
+ *     "onExecuted" => function(["mode" => int]) {},
+ *     "onFileDownloaded" => function(["file" => File, "count" => int]) {},
+ *     "onDirectoryCreated" => function([]) {}
+ * ]
+ */
+$callbacks = [];
 
 /**
  * Used to indicate invalid given username.
@@ -32,22 +53,13 @@ function consoleOut(string $message) : void {
 }
 
 /**
- * Read a buffer from STDIN.
- * 
- * @return string
- */
-function consoleIn() : string {
-    return trim(((string) fgets(STDIN)));
-}
-
-/**
  * Exit the program with optional $exitMsg and $exitCode
  * 
- * @param string|null $exitMSG
+ * @param string|null $exitMsg
  * @param int $exitCode
  */
-function programExit(?string $exitMsg = NULL, int $exitCode = 0) : void {
-    if ($exitMsg !== NULL) {
+function programExit(?string $exitMsg = null, int $exitCode = 0) : void {
+    if ($exitMsg !== null) {
         consoleOut("[$exitCode] " . $exitMsg);
     }
 
@@ -84,15 +96,16 @@ function validateUsername(string $username) : bool {
  * @return array|null
  */
 function parseArgs(array $args) : ?array {
-    if (count($args) === 1)
-        return NULL;
+    if (count($args) === 1) {
+        return null;
+    }
 
     $retVal = array_reverse($args, false);
     unset($retVal[count($retVal) - 1]);
     return $retVal;
 }
 
-(function(array $args) : void {
+(function(array $args, array $filterOptions, array $callbacks) : void {
     $args = parseArgs($args) ?? [];
 
     /**
@@ -111,36 +124,24 @@ function parseArgs(array $args) : ?array {
         );
     };
 
-    /**
-     * Closure to execute crawl process.
-     * Mode:
-     *  0 IMPORT
-     *  1 JSON_RESPONSE
-     * 
-     * @param string $username
-     * @param int $mode 0 or 1
-     * 
-     * @return bool
-     */
-    $crawling = function(string $username, int $mode) : bool {
-        return false;
-    };
-
     if (count($args) !== 2) {
         $interface();
         programExit();
     }
 
-    if (!validateUsername($args[1])) {
+    $username = $args[1];
+    $param = $args[0];
+
+    if (!validateUsername($username)) {
         programExit("Invalid github username.", ERR_INVALID_USERNAME);
     }
     
-    switch(strtolower($args[0])) {
+    switch(strtolower($param)) {
         case "import":
-            GistCrawler::initialize($args[1], true);
+            GistCrawler::initialize($username, true, $filterOptions, $callbacks);
             break;
         case "raw":
-            GistCrawler::initialize($args[1], false);
+            GistCrawler::initialize($username, false, [], $callbacks);
             break;
         default:
             $interface();
@@ -149,4 +150,4 @@ function parseArgs(array $args) : ?array {
     }
 
     programExit();
-})($argv);
+})($argv, $filterOptions, $callbacks);

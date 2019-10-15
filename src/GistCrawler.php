@@ -45,14 +45,24 @@ class GistCrawler {
      * 
      * @var array|null $data
      */
-    private static $files = NULL;
+    private static $files = null;
 
     /**
-     * Fetch main Gist API and store it as PHP's array.
+     * Fetch main Gist API and store it as PHP array.
      * 
      * @var array|null $data
      */
-    private static $data = NULL;
+    private static $data = null;
+
+    private static $callbacks = [];
+
+    private static function invokeCallback(string $eventName, array $value = []) : void {
+        if (!isset(self::$callbacks[$eventName])) {
+            return;
+        }
+
+        (self::$callbacks[$eventName])($value);
+    }
 
     /**
      * Create new user's directory if not exists.
@@ -62,6 +72,8 @@ class GistCrawler {
     private static function getUserDirectory() : string {
         if (!is_dir(self::$userDirectory)) {
             mkdir(self::$userDirectory, 0777, true);
+
+            self::invokeCallback("onDirectoryCreated");
         }
 
         return self::$userDirectory;
@@ -80,17 +92,37 @@ class GistCrawler {
      * @return array|null
      */
     private static function classifyFiles() : ?array {
-        if (self::$data === null)
+        if (self::$data === null) {
             return null;
-        
+        }
+
         $files = [];
         $headIndex = null;
+        $counter = 0;
         for ($i = 0; $i < count(self::$data); ++$i) {
             foreach (self::$data[$i]["files"] as $index => $fileProps) {
-                if ($headIndex === null)
+                if ($headIndex === null) {
                     $headIndex = $index;
+                }
+                /**
+                 * Filter option
+                 * type         : File type includes "plain/text", "application/x-ruby", "application/x-python", "application/ecmascript"
+                 * language     : Indicates programming / scripting language used by the file. "Dart", "Python", "Ruby", "C", "PHP".
+                 *      All the language started with uppercase character. (nullable)
+                 * max_size     : Maximum acceptable file size in bytes.
+                 *
+                 * NOTE: It's kinda confusing for "type" and "language", C (and some) languages has plain/text type but indicated as is.
+                 */
+                $file = (new Files($fileProps))->applyOptions(self::$filterOptions);
+                if ($file === null) {
+                    continue;
+                }
 
-                $files[$headIndex][] = new Files($fileProps);
+                $file->fetchContent();
+                $files[$headIndex][] = $file;
+                ++$counter;
+
+                self::invokeCallback("onFileDownloaded", ["file" => $file, "count" => $counter]);
             }
             $headIndex = null;
         }
@@ -115,10 +147,13 @@ class GistCrawler {
                     self::$data, 
                     JSON_PRETTY_PRINT | JSON_UNESCAPED_LINE_TERMINATORS | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 ));
+
+                self::invokeCallback("onExecuted", ["mode" => 0, "data" => self::$data]);
             break;
 
             case 1:
                 // TODO
+                self::invokeCallback("onExecuted", ["mode" => 1]);
             break;
         }
     }
@@ -132,8 +167,9 @@ class GistCrawler {
      * @return array|null Returned as array if succeed and null otherwise.
      */
     private static function fetchData() : ?array {
-        if (!self::$initialized)
-            return NULL;
+        if (!self::$initialized) {
+            return null;
+        }
 
         $ch = curl_init();
         curl_setopt_array($ch, [
@@ -145,7 +181,8 @@ class GistCrawler {
 
         $jsonResponse = curl_exec($ch);
         curl_close($ch);
-        
+
+        self::invokeCallback("onFetched", ["response" => $jsonResponse]);
         return is_string($jsonResponse) 
             ? json_decode($jsonResponse, true, 0x200, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY)
             : [];
@@ -157,21 +194,26 @@ class GistCrawler {
      * 
      * @param string $username
      * @param bool $import
+     * @param array $filterOptions
+     * @param array $callbacks
      * 
      * @return bool
      */
-    public static function initialize(string $username, bool $import, array $opt = []) : bool {
+    public static function initialize(string $username, bool $import, array $filterOptions = [], array $callbacks = []) : bool {
         if (!self::$initialized) {
+            self::invokeCallback("onInitialize", ["username" => $username, "import_mode" => $import, "filter_options" => $filterOptions]);
+
             self::$initialized = true;
 
             self::$username = $username;
             self::$userDirectory = "\x6f\x75\x74\x2f" . $username . "\x2f";
+            self::$callbacks = $callbacks;
             self::$data = self::fetchData();
 
-            if ($import && $opt !== []) {
-                self::$filterOptions["type"]        = $opt["type"] ?? "*";
-                self::$filterOptions["languages"]   = $opt["languages"] ?? ["*"];
-                self::$filterOptions["max_size"]    = $opt["max_size"] ?? (10 ** 6);
+            if ($import && $filterOptions !== []) {
+                self::$filterOptions["type"]        = $filterOptions["type"] ?? ["*"];
+                self::$filterOptions["languages"]   = $filterOptions["languages"] ?? ["*"];
+                self::$filterOptions["max_size"]    = $filterOptions["max_size"] ?? (10 ** 6);
             }
             self::execute((int) $import);
 
@@ -191,7 +233,7 @@ class GistCrawler {
     }
 
     /**
-     * Get all API response as an JSON.
+     * Get all API response as an JSON (string).
      * 
      * @return string|null
      */
