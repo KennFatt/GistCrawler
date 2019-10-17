@@ -4,25 +4,32 @@ declare(strict_types=1);
 
 require './src/GistCrawler.php';
 require './src/Benchmark.php';
-require './src/Files.php';
+require './src/GistFile.php';
 /**
- * TODO
+ * This is only works for importing gists into a local file.
+ * type: File type, such as "application/x-python", "application/x-ruby", "plain/text".
+ * language: File's programming language or scripting language, started with uppercase character, such as "C", "Ruby", "Python", "PHP".
+ * max_size: File size in bytes.
+ *
  * @var array $filterOptions = [
- *     "type" => string,
- *     "language" => string,
- *     "size" => int
+ *     "type" => [],
+ *     "language" => null|[],
+ *     "max_size" => int
  * ]
  */
 $filterOptions = [];
 
 /**
- * TODO
+ * Array argument passed to each callback.
+ * Will be invoked when exact even triggered.
+ *
  * @var array $callbacks = [
- *     "onInitialize" => function(["username" => string, "import_mode" => bool, "filter_options" => array]) {},
+ *     "onInitialize" => function(["username" => string, "filter_options" => array]) {},
  *     "onFetched" => function(["response" => mixed]) {},
  *     "onExecuted" => function(["mode" => int]) {},
- *     "onFileDownloaded" => function(["file" => File, "count" => int]) {},
- *     "onDirectoryCreated" => function([]) {}
+ *     "onFileDownloaded" => function(["file" => GistFile, "count" => int]) {},
+ *     "onDirectoryCreated" => function([]) {},
+ *     "onFileWritten" => function(["file" => GistFile, "file_directory" => string]) {}
  * ]
  */
 $callbacks = [];
@@ -48,7 +55,7 @@ define("ERR_INVALID_OPTIONS", 0x05);
 function consoleOut(string $message) : void {
     fwrite(
         STDOUT,
-        ord($message[strlen($message) - 1]) !== 10 ? $message . "\x2f" : $message
+        ord($message[strlen($message) - 1]) !== 10 ? $message . "\x0a" : $message
     );
 }
 
@@ -129,19 +136,29 @@ function parseArgs(array $args) : ?array {
         programExit();
     }
 
-    $username = $args[1];
-    $param = $args[0];
+    /**
+     * @var string $username
+     * @var string $option
+     */
+    $username = trim($args[1]);
+    $option = trim($args[0]);
 
     if (!validateUsername($username)) {
         programExit("Invalid github username.", ERR_INVALID_USERNAME);
     }
     
-    switch(strtolower($param)) {
-        case "import":
-            GistCrawler::initialize($username, true, $filterOptions, $callbacks);
-            break;
+    switch(strtolower($option)) {
         case "raw":
-            GistCrawler::initialize($username, false, [], $callbacks);
+            $status = GistCrawler::initialize($username, [], $callbacks);
+            if ($status) {
+                GistCrawler::execute(0);
+            }
+            break;
+        case "import":
+            $status = GistCrawler::initialize($username, $filterOptions, $callbacks);
+            if ($status) {
+                GistCrawler::execute(1);
+            }
             break;
         default:
             $interface();

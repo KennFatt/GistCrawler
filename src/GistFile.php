@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
-class Files {
+class GistFile {
     /** @var string|null $filename */
     private $filename;
+    /** @var string|null $headIndex */
+    private $headIndex;
     /** @var string|null $type */
     private $type;
     /** @var string|null $language */
@@ -36,6 +38,7 @@ class Files {
 
     /**
      * Used to apply the filter options after initialize the object.
+     * TODO: Improve and fixes minor bug right on this function.
      *
      * @param array $options = [
      *     "type" => ["*"],
@@ -43,24 +46,43 @@ class Files {
      *     "max_size" => 10 ** 6
      * ];
      *
-     * @return Files|null
+     * @return GistFile|null
      */
-    public function applyOptions(array $options) : ?Files {
-        if ($options === [])
+    public function applyOptions(array $options) : ?GistFile {
+        if ($options === []) {
             return null;
+        }
 
         foreach ($options as $key => $value) {
-            if ($key === "max_size" || $value[0] === "*") continue;
+            if ($key === "max_size" || $value[0] === "*") {
+                continue;
+            }
 
             $tmp = $key === "type" ? $this->getType() : $this->getLanguage();
             $matches = array_filter($value, function (string $value) use ($tmp) : bool {
                 return $value === $tmp;
             });
 
-            if ($matches === []) return null;
+            if ($matches === []) {
+                return null;
+            }
         }
 
         return $options['max_size'] >= $this->getSize() ? $this : null;
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getHeadIndex(): ?string {
+        return $this->headIndex;
+    }
+
+    /**
+     * @param string|null $headIndex
+     */
+    public function setHeadIndex(string $headIndex): void {
+        $this->headIndex = $headIndex;
     }
 
     /**

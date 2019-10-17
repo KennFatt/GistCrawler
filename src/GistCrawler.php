@@ -79,50 +79,59 @@ class GistCrawler {
         return self::$userDirectory;
     }
 
+    private static function writeFile(GistFile $file) : void {
+        $userDirectory = self::getUserDirectory();
+        $fileDirectory = $userDirectory . $file->getHeadIndex();
+        if (!is_dir($fileDirectory)) {
+            mkdir($fileDirectory);
+        }
+
+        $resource = fopen($fileDirectory . DIRECTORY_SEPARATOR . $file->getFilename(), 'w+');
+        fwrite($resource, (string) $file);
+        fclose($resource);
+
+        self::invokeCallback("onFileWritten", ["file" => $file, "file_directory" => $fileDirectory]);
+    }
+
     /**
      * Classifying the data and make it as object.
      * Return type:
      *  [
-     *      string => Files[]
+     *      string => GistFile[]
      *      ...
      *  ]
      * 
-     * @see Files
-     * 
+     * @param bool $forceWrite
+     *
      * @return array|null
+     *@see GistFile
+     *
      */
-    private static function classifyFiles() : ?array {
+    private static function classifyFiles(bool $forceWrite = false) : ?array {
         if (self::$data === null) {
             return null;
         }
 
         $files = [];
         $headIndex = null;
-        $counter = 0;
         for ($i = 0; $i < count(self::$data); ++$i) {
             foreach (self::$data[$i]["files"] as $index => $fileProps) {
-                if ($headIndex === null) {
-                    $headIndex = $index;
-                }
-                /**
-                 * Filter option
-                 * type         : File type includes "plain/text", "application/x-ruby", "application/x-python", "application/ecmascript"
-                 * language     : Indicates programming / scripting language used by the file. "Dart", "Python", "Ruby", "C", "PHP".
-                 *      All the language started with uppercase character. (nullable)
-                 * max_size     : Maximum acceptable file size in bytes.
-                 *
-                 * NOTE: It's kinda confusing for "type" and "language", C (and some) languages has plain/text type but indicated as is.
-                 */
-                $file = (new Files($fileProps))->applyOptions(self::$filterOptions);
+                $file = (new GistFile($fileProps))->applyOptions(self::$filterOptions);
                 if ($file === null) {
                     continue;
                 }
 
+                if ($headIndex === null) {
+                    $headIndex = explode(".", $file->getFilename())[0];
+                }
+                $file->setHeadIndex((string) $headIndex);
                 $file->fetchContent();
                 $files[$headIndex][] = $file;
-                ++$counter;
+                self::invokeCallback("onFileDownloaded", ["file" => $file, "count" => count($files)]);
 
-                self::invokeCallback("onFileDownloaded", ["file" => $file, "count" => $counter]);
+                if ($forceWrite) {
+                    self::writeFile($file);
+                }
             }
             $headIndex = null;
         }
@@ -135,7 +144,7 @@ class GistCrawler {
      * 
      * @param int $mode 0 for raw json and 1 import option.
      */
-    private static function execute(int $mode) {
+    public static function execute(int $mode) {
         switch ($mode) {
             case 0:
                 /**
@@ -148,11 +157,12 @@ class GistCrawler {
                     JSON_PRETTY_PRINT | JSON_UNESCAPED_LINE_TERMINATORS | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 ));
 
-                self::invokeCallback("onExecuted", ["mode" => 0, "data" => self::$data]);
+                self::invokeCallback("onExecuted", ["mode" => 0]);
             break;
 
             case 1:
                 // TODO
+                self::classifyFiles(true); // DEBUG
                 self::invokeCallback("onExecuted", ["mode" => 1]);
             break;
         }
@@ -193,29 +203,25 @@ class GistCrawler {
      * Initialize username and state.
      * 
      * @param string $username
-     * @param bool $import
      * @param array $filterOptions
      * @param array $callbacks
      * 
      * @return bool
      */
-    public static function initialize(string $username, bool $import, array $filterOptions = [], array $callbacks = []) : bool {
+    public static function initialize(string $username, array $filterOptions = [], array $callbacks = []) : bool {
         if (!self::$initialized) {
-            self::invokeCallback("onInitialize", ["username" => $username, "import_mode" => $import, "filter_options" => $filterOptions]);
+            self::invokeCallback("onInitialize", ["username" => $username, "filter_options" => $filterOptions]);
 
             self::$initialized = true;
 
             self::$username = $username;
-            self::$userDirectory = "\x6f\x75\x74\x2f" . $username . "\x2f";
+            self::$userDirectory = "\x6f\x75\x74\x2f" . $username . DIRECTORY_SEPARATOR;
             self::$callbacks = $callbacks;
             self::$data = self::fetchData();
 
-            if ($import && $filterOptions !== []) {
-                self::$filterOptions["type"]        = $filterOptions["type"] ?? ["*"];
-                self::$filterOptions["languages"]   = $filterOptions["languages"] ?? ["*"];
-                self::$filterOptions["max_size"]    = $filterOptions["max_size"] ?? (10 ** 6);
-            }
-            self::execute((int) $import);
+            self::$filterOptions["type"]        = $filterOptions["type"] ?? ["*"];
+            self::$filterOptions["languages"]   = $filterOptions["languages"] ?? ["*"];
+            self::$filterOptions["max_size"]    = $filterOptions["max_size"] ?? 1024;
 
             return true;
         }
