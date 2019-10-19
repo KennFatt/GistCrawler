@@ -22,64 +22,83 @@ class GistFile {
      * Gist file object.
      *
      * @param array $props File properties (filename, type, language, raw_url, size).
-     * @param bool $forceDownload Forcing to download the content while initialize.
      */
-    public function __construct(array $props, bool $forceDownload = false) {
+    public function __construct(array $props) {
         $this->filename = $props["filename"];
         $this->type     = $props["type"];
         $this->language = $props["language"];
         $this->raw_url  = $props["raw_url"];
         $this->size     = $props["size"];
-
-        if ($forceDownload) {
-            $this->content = file_get_contents($this->getRawUrl());
-        }
     }
 
     /**
-     * Used to apply the filter options after initialize the object.
-     * TODO: Improve and fixes minor bug right on this function.
+     * Used to apply the filter options AFTER the object initialized.
+     * Return NULL if one of given $options is not matches.
+     * Otherwise to succeed the apply method.
      *
      * @param array $options = [
      *     "type" => ["*"],
      *     "language" => ["*"],
-     *     "max_size" => 10 ** 6
+     *     "max_size" => -1
      * ];
      *
      * @return GistFile|null
      */
     public function applyOptions(array $options) : ?GistFile {
         if ($options === []) {
-            return null;
+            return $this; // Nothing to do, continue.
         }
 
-        foreach ($options as $key => $value) {
-            if ($key === "max_size" || $value[0] === "*") {
-                continue;
-            }
+        $callbackGenerator = function(string $identifier) : callable {
+            return function (string $val) use ($identifier) : bool {
+                return $val === $identifier;
+            };
+        };
 
-            $tmp = $key === "type" ? $this->getType() : $this->getLanguage();
-            $matches = array_filter($value, function (string $value) use ($tmp) : bool {
-                return $value === $tmp;
-            });
+        if ($options["type"][0] !== "*") {
+            $typeMatches = array_filter($options["type"], $callbackGenerator($this->getType()));
 
-            if ($matches === []) {
+            if ($typeMatches === []) {
                 return null;
             }
         }
 
-        return $options['max_size'] >= $this->getSize() ? $this : null;
+        if ($options["language"][0] !== "*") {
+            $languageMatches = array_filter($options["language"], $callbackGenerator($this->getLanguage()));
+
+            if ($languageMatches === []) {
+                return null;
+            }
+        }
+
+        return $options["max_size"] > 0
+            ? ($this->getSize() <= $options["max_size"]
+                ? $this
+                : null
+            ) : $this;
     }
 
     /**
-     * @return string|null
+     * Head Index is used to determine basis group of this file.
+     * For example, if there are 3 files and in order: bitwise_ops.c, bitwise_ops.h, unit_testing.h
+     * Then we use bitwise_ops (the first file without ext) as a Head Index.
+     *
+     * Basically, this function is made to generate file structure as shown below:
+     *  - bitwise_ops/
+     *  --- bitwise_ops.c
+     *  --- bitwise_ops.h
+     *  --- unit_testing.h
+     *
+     * @return string
      */
-    public function getHeadIndex(): ?string {
-        return $this->headIndex;
+    public function getHeadIndex(): string {
+        return $this->headIndex ?? explode(".", $this->getFilename())[0];
     }
 
     /**
-     * @param string|null $headIndex
+     * Manually set the Head Index value.
+     *
+     * @param string $headIndex
      */
     public function setHeadIndex(string $headIndex): void {
         $this->headIndex = $headIndex;
@@ -138,8 +157,7 @@ class GistFile {
     }
 
     /**
-     * Override magical __toString method.
-     * This is helpful to save content into a real file.
+     * Lazy and useful function to show its content.
      *
      * @return string
      */

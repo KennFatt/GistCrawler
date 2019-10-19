@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+// TODO: Separate the initiator with runnable script.
 require './src/GistCrawler.php';
-require './src/Benchmark.php';
 require './src/GistFile.php';
 /**
  * This is only works for importing gists into a local file.
@@ -11,13 +11,17 @@ require './src/GistFile.php';
  * language: File's programming language or scripting language, started with uppercase character, such as "C", "Ruby", "Python", "PHP".
  * max_size: File size in bytes.
  *
+ * TODO: Set filter options as configurable JSON file, `type` and `language` value must be an array.
+ *
  * @var array $filterOptions = [
  *     "type" => [],
  *     "language" => null|[],
  *     "max_size" => int
  * ]
  */
-$filterOptions = [];
+$filterOptions = [
+    "type" => ["text/plain"]
+];
 
 /**
  * Array argument passed to each callback.

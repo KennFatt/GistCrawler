@@ -34,28 +34,32 @@ class GistCrawler {
     private static $username = "";
 
     /**
+     * Fetch main Gist API and store it as PHP array.
+     *
+     * @var array|null $data
+     */
+    private static $data = null;
+
+    /**
      * List of options to filter importing process.
-     * 
+     *
      * @var array $filterOptions
      */
     private static $filterOptions = [];
 
     /**
-     * Final fetch data.
-     * 
-     * @var array|null $data
+     * Trace your data by using callback.
+     *
+     * @var array $callbacks
      */
-    private static $files = null;
-
-    /**
-     * Fetch main Gist API and store it as PHP array.
-     * 
-     * @var array|null $data
-     */
-    private static $data = null;
-
     private static $callbacks = [];
 
+    /**
+     * Invoke callback when specific event triggered.
+     *
+     * @param string $eventName
+     * @param array $value
+     */
     private static function invokeCallback(string $eventName, array $value = []) : void {
         if (!isset(self::$callbacks[$eventName])) {
             return;
@@ -79,6 +83,11 @@ class GistCrawler {
         return self::$userDirectory;
     }
 
+    /**
+     * Writing `$file` into local file.
+     *
+     * @param GistFile $file
+     */
     private static function writeFile(GistFile $file) : void {
         $userDirectory = self::getUserDirectory();
         $fileDirectory = $userDirectory . $file->getHeadIndex();
@@ -86,26 +95,20 @@ class GistCrawler {
             mkdir($fileDirectory);
         }
 
-        $resource = fopen($fileDirectory . DIRECTORY_SEPARATOR . $file->getFilename(), 'w+');
-        fwrite($resource, (string) $file);
-        fclose($resource);
+        if ($resource = fopen($fileDirectory . DIRECTORY_SEPARATOR . $file->getFilename(), 'w+')) {
+            fwrite($resource, (string) $file);
+            fclose($resource);
+        }
 
         self::invokeCallback("onFileWritten", ["file" => $file, "file_directory" => $fileDirectory]);
     }
 
     /**
-     * Classifying the data and make it as object.
-     * Return type:
-     *  [
-     *      string => GistFile[]
-     *      ...
-     *  ]
+     * Classifying the data and make it as an object.
      * 
-     * @param bool $forceWrite
+     * @param bool $forceWrite Forcing to write the content after downloaded.
      *
      * @return array|null
-     *@see GistFile
-     *
      */
     private static function classifyFiles(bool $forceWrite = false) : ?array {
         if (self::$data === null) {
@@ -140,18 +143,13 @@ class GistCrawler {
     }
 
     /**
-     * Execute process.
+     * Instruction to execute given `$mode`.
      * 
      * @param int $mode 0 for raw json and 1 import option.
      */
-    public static function execute(int $mode) {
+    public static function execute(int $mode) : void {
         switch ($mode) {
             case 0:
-                /**
-                 * It would write "null" if the data itself has null value.
-                 * Note that we use `fwrite` to STDOUT. So we can control the output in CLI.
-                 *  Example: php run.php kennfatt raw > kennfatt.json
-                 */
                 fwrite(STDOUT, json_encode(
                     self::$data, 
                     JSON_PRETTY_PRINT | JSON_UNESCAPED_LINE_TERMINATORS | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
@@ -161,8 +159,8 @@ class GistCrawler {
             break;
 
             case 1:
-                // TODO
-                self::classifyFiles(true); // DEBUG
+                self::classifyFiles(true);
+
                 self::invokeCallback("onExecuted", ["mode" => 1]);
             break;
         }
@@ -177,10 +175,6 @@ class GistCrawler {
      * @return array|null Returned as array if succeed and null otherwise.
      */
     private static function fetchData() : ?array {
-        if (!self::$initialized) {
-            return null;
-        }
-
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => "https://api.github.com/users/" . self::$username . "/gists",
@@ -220,41 +214,12 @@ class GistCrawler {
             self::$data = self::fetchData();
 
             self::$filterOptions["type"]        = $filterOptions["type"] ?? ["*"];
-            self::$filterOptions["languages"]   = $filterOptions["languages"] ?? ["*"];
-            self::$filterOptions["max_size"]    = $filterOptions["max_size"] ?? 1024;
+            self::$filterOptions["language"]    = $filterOptions["language"] ?? ["*"];
+            self::$filterOptions["max_size"]    = $filterOptions["max_size"] ?? 1049000000;
 
             return true;
         }
 
         return false;
-    }
-
-    /**
-     * Get all API response as an array.
-     * 
-     * @return array|null
-     */
-    public static function getGists() : ?array {
-        return self::$files ?? NULL;
-    }
-
-    /**
-     * Get all API response as an JSON (string).
-     * 
-     * @return string|null
-     */
-    public static function getGistsJson() : ?string {
-        return is_array(self::$files)
-            ? json_encode(self::$files, JSON_PRETTY_PRINT)
-            : NULL;
-    }
-
-    /**
-     * Get count all public user's gist.
-     * 
-     * @return int
-     */
-    public static function getCountGist() : int {
-        return count(self::$files);
     }
 }
