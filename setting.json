@@ -1,0 +1,9 @@
+{
+    "types": [
+        "*"
+    ],
+    "languages": [
+        "*"
+    ],
+    "max_size": -1
+}

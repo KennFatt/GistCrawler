@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+require './config.php';
 require './src/GistCrawler.php';
+require './src/GistFile.php';
 
 /**
  * Used to indicate invalid given username.
@@ -25,27 +27,18 @@ define("ERR_INVALID_OPTIONS", 0x05);
 function consoleOut(string $message) : void {
     fwrite(
         STDOUT,
-        ord($message[strlen($message) - 1]) !== 10 ? $message . "\n" : $message
+        ord($message[strlen($message) - 1]) !== 10 ? $message . "\x0a" : $message
     );
-}
-
-/**
- * Read a buffer from STDIN.
- * 
- * @return string
- */
-function consoleIn() : string {
-    return trim(((string) fgets(STDIN)));
 }
 
 /**
  * Exit the program with optional $exitMsg and $exitCode
  * 
- * @param string|null $exitMSG
+ * @param string|null $exitMsg
  * @param int $exitCode
  */
-function programExit(?string $exitMsg = NULL, int $exitCode = 0) : void {
-    if ($exitMsg !== NULL) {
+function programExit(?string $exitMsg = null, int $exitCode = 0) : void {
+    if ($exitMsg !== null) {
         consoleOut("[$exitCode] " . $exitMsg);
     }
 
@@ -73,21 +66,25 @@ function validateUsername(string $username) : bool {
 
 /**
  * Strip the filename ($argv[0]) from $argv.
+ * Since we reverse the array and new produced array are look like this:
+ *  0 = options
+ *  1 = username
  * 
  * @param array $args
  * 
  * @return array|null
  */
 function parseArgs(array $args) : ?array {
-    if (count($args) === 1)
-        return NULL;
+    if (count($args) === 1) {
+        return null;
+    }
 
     $retVal = array_reverse($args, false);
     unset($retVal[count($retVal) - 1]);
     return $retVal;
 }
 
-(function(array $args) : void {
+(function(array $args, array $filterOptions, array $callbacks) : void {
     $args = parseArgs($args) ?? [];
 
     /**
@@ -100,43 +97,46 @@ function parseArgs(array $args) : ?array {
         ));
 
         consoleOut(
-            "Available options:
+            "\tAvailable options:
             \timport\t: Import all the gists
             \traw\t: Take raw json response\n"
         );
     };
 
-    /**
-     * Closure to execute crawl process.
-     * Mode:
-     *  0 IMPORT
-     *  1 JSON_RESPONSE
-     * 
-     * @param string $username
-     * @param int $mode 0 or 1
-     * 
-     * @return bool
-     */
-    $crawling = function(string $username, int $mode) : bool {
-        return false;
-    };
-
-    if (count($args) === 0) {
+    if (count($args) !== 2) {
         $interface();
         programExit();
     }
 
-    if (!validateUsername($args[0])) {
+    /**
+     * @var string $username
+     * @var string $option
+     */
+    $username = trim($args[1]);
+    $option = trim($args[0]);
+
+    if (!validateUsername($username)) {
         programExit("Invalid github username.", ERR_INVALID_USERNAME);
     }
     
-    switch(strtolower($args[1])) {
-        case "import":
-            break;
+    switch(strtolower($option)) {
         case "raw":
+            $status = GistCrawler::initialize($username, [], $callbacks);
+            if ($status) {
+                GistCrawler::execute(0);
+            }
+            break;
+        case "import":
+            $status = GistCrawler::initialize($username, $filterOptions, $callbacks);
+            if ($status) {
+                GistCrawler::execute(1);
+            }
             break;
         default:
-            programExit();
+            $interface();
+            programExit("Invalid options given.", ERR_INVALID_OPTIONS);
             break;
     }
-})($argv);
+
+    programExit();
+})($argv, $filterOptions, $callbacks);

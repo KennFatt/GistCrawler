@@ -34,11 +34,39 @@ class GistCrawler {
     private static $username = "";
 
     /**
-     * Final fetch data.
-     * 
+     * Fetch main Gist API and store it as PHP array.
+     *
      * @var array|null $data
      */
-    private static $data = NULL;
+    private static $data = null;
+
+    /**
+     * List of options to filter importing process.
+     *
+     * @var array $filterOptions
+     */
+    private static $filterOptions = [];
+
+    /**
+     * Trace your data by using callback.
+     *
+     * @var array $callbacks
+     */
+    private static $callbacks = [];
+
+    /**
+     * Invoke callback when specific event triggered.
+     *
+     * @param string $eventName
+     * @param array $value
+     */
+    private static function invokeCallback(string $eventName, array $value = []) : void {
+        if (!isset(self::$callbacks[$eventName])) {
+            return;
+        }
+
+        (self::$callbacks[$eventName])($value);
+    }
 
     /**
      * Create new user's directory if not exists.
@@ -48,9 +76,94 @@ class GistCrawler {
     private static function getUserDirectory() : string {
         if (!is_dir(self::$userDirectory)) {
             mkdir(self::$userDirectory, 0777, true);
+
+            self::invokeCallback("onDirectoryCreated");
         }
 
         return self::$userDirectory;
+    }
+
+    /**
+     * Writing `$file` into local file.
+     *
+     * @param GistFile $file
+     */
+    private static function writeFile(GistFile $file) : void {
+        $userDirectory = self::getUserDirectory();
+        $fileDirectory = $userDirectory . $file->getHeadIndex();
+        if (!is_dir($fileDirectory)) {
+            mkdir($fileDirectory);
+        }
+
+        if ($resource = fopen($fileDirectory . DIRECTORY_SEPARATOR . $file->getFilename(), 'w+')) {
+            fwrite($resource, (string) $file);
+            fclose($resource);
+        }
+
+        self::invokeCallback("onFileWritten", ["file" => $file, "file_directory" => $fileDirectory]);
+    }
+
+    /**
+     * Classifying the data and make it as an object.
+     * 
+     * @param bool $forceWrite Forcing to write the content after downloaded.
+     *
+     * @return array|null
+     */
+    private static function classifyFiles(bool $forceWrite = false) : ?array {
+        if (self::$data === null) {
+            return null;
+        }
+
+        $files = [];
+        $headIndex = null;
+        for ($i = 0; $i < count(self::$data); ++$i) {
+            foreach (self::$data[$i]["files"] as $index => $fileProps) {
+                $file = (new GistFile($fileProps))->applyOptions(self::$filterOptions);
+                if ($file === null) {
+                    continue;
+                }
+
+                if ($headIndex === null) {
+                    $headIndex = explode(".", $file->getFilename())[0];
+                }
+                $file->setHeadIndex((string) $headIndex);
+                $file->fetchContent();
+                $files[$headIndex][] = $file;
+                self::invokeCallback("onFileDownloaded", ["file" => $file, "count" => count($files)]);
+
+                if ($forceWrite) {
+                    self::writeFile($file);
+                }
+            }
+            $headIndex = null;
+        }
+        
+        return $files;
+    }
+
+    /**
+     * Instruction to execute given `$mode`.
+     * 
+     * @param int $mode 0 for raw json and 1 import option.
+     */
+    public static function execute(int $mode) : void {
+        switch ($mode) {
+            case 0:
+                fwrite(STDOUT, json_encode(
+                    self::$data, 
+                    JSON_PRETTY_PRINT | JSON_UNESCAPED_LINE_TERMINATORS | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ));
+
+                self::invokeCallback("onExecuted", ["mode" => 0]);
+            break;
+
+            case 1:
+                self::classifyFiles(true);
+
+                self::invokeCallback("onExecuted", ["mode" => 1]);
+            break;
+        }
     }
 
     /**
@@ -62,9 +175,6 @@ class GistCrawler {
      * @return array|null Returned as array if succeed and null otherwise.
      */
     private static function fetchData() : ?array {
-        if (!self::$initialized)
-            return NULL;
-
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => "https://api.github.com/users/" . self::$username . "/gists",
@@ -73,38 +183,13 @@ class GistCrawler {
             CURLOPT_HEADER => 0x00
         ]);
 
-        $retVal = curl_exec($ch);
+        $jsonResponse = curl_exec($ch);
         curl_close($ch);
-        
-        return json_decode($retVal, true, 512, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY);
-    }
 
-    /**
-     * Fetch all user's gists.
-     */
-    private static function fetchGists() : void {
-        foreach (self::$data as $gist) {
-            if (!isset($gist["files"]) && !(count($gist["files"]) > 0))
-                break;
-
-            $subDir = "";
-            foreach (array_keys($gist["files"]) as $fileName) {
-                if ($subDir === "") {
-                    $subDir = self::getUserDirectory() . substr($fileName, 0, stripos($fileName, ".")) . "\x2f";
-                    @mkdir($subDir);
-                }
-
-                // TODO: Remove boilerplate
-                // TODO: Take 10 content (or optional) and write it, repeat.
-                $fileName = $gist["files"][$fileName]["filename"];
-                $contentUrl = $gist["files"][$fileName]["raw_url"];
-                $content = file_get_contents($contentUrl);
-
-                $file = @fopen($subDir . $fileName, "w+");
-                fwrite($file, $content);
-                fclose($file);
-            }
-        }
+        self::invokeCallback("onFetched", ["response" => $jsonResponse]);
+        return is_string($jsonResponse) 
+            ? json_decode($jsonResponse, true, 0x200, JSON_BIGINT_AS_STRING | JSON_OBJECT_AS_ARRAY)
+            : [];
     }
 
     /**
@@ -112,50 +197,29 @@ class GistCrawler {
      * Initialize username and state.
      * 
      * @param string $username
-     * @param bool $execute TODO
+     * @param array $filterOptions
+     * @param array $callbacks
      * 
      * @return bool
      */
-    public static function initialize(string $username, bool $execute) : bool {
+    public static function initialize(string $username, array $filterOptions = [], array $callbacks = []) : bool {
         if (!self::$initialized) {
+            self::invokeCallback("onInitialize", ["username" => $username, "filter_options" => $filterOptions]);
+
             self::$initialized = true;
 
             self::$username = $username;
-            self::$userDirectory = "\x6f\x75\x74\x2f" . $username . "\x2f";
+            self::$userDirectory = "\x6f\x75\x74\x2f" . $username . DIRECTORY_SEPARATOR;
+            self::$callbacks = $callbacks;
             self::$data = self::fetchData();
+
+            self::$filterOptions["types"]        = $filterOptions["types"] ?? ["*"];
+            self::$filterOptions["languages"]    = $filterOptions["languages"] ?? ["*"];
+            self::$filterOptions["max_size"]    = $filterOptions["max_size"] ?? -1;
 
             return true;
         }
 
         return false;
-    }
-
-    /**
-     * Get all API response as an array.
-     * 
-     * @return array|null
-     */
-    public static function getGists() : ?array {
-        return self::$data ?? NULL;
-    }
-
-    /**
-     * Get all API response as an JSON.
-     * 
-     * @return string|null
-     */
-    public static function getGistsJson() : ?string {
-        return is_array(self::$data)
-            ? json_encode(self::$data, JSON_PRETTY_PRINT)
-            : NULL;
-    }
-
-    /**
-     * Get count all public user's gist.
-     * 
-     * @return int
-     */
-    public static function getCountGist() : int {
-        return count(self::$data);
     }
 }
