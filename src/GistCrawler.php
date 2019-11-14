@@ -213,9 +213,9 @@ class GistCrawler {
             self::$callbacks = $callbacks;
             self::$data = self::fetchData();
 
-            self::$filterOptions["type"]        = $filterOptions["type"] ?? ["*"];
-            self::$filterOptions["language"]    = $filterOptions["language"] ?? ["*"];
-            self::$filterOptions["max_size"]    = $filterOptions["max_size"] ?? 1049000000;
+            self::$filterOptions["types"]        = $filterOptions["types"] ?? ["*"];
+            self::$filterOptions["languages"]    = $filterOptions["languages"] ?? ["*"];
+            self::$filterOptions["max_size"]    = $filterOptions["max_size"] ?? -1;
 
             return true;
         }

@@ -49,28 +49,27 @@ class GistFile {
             return $this; // Nothing to do, continue.
         }
 
-        $callbackGenerator = function(string $identifier) : callable {
+        $filterCallback = function(string $identifier) : callable {
             return function (string $val) use ($identifier) : bool {
-                return $val === $identifier;
+                return strtolower($val) === strtolower($identifier);
             };
         };
 
-        if ($options["type"][0] !== "*") {
-            $typeMatches = array_filter($options["type"], $callbackGenerator($this->getType()));
-
-            if ($typeMatches === []) {
+        // Check for `type` options.
+        if ($options["types"][0] !== "*") {
+            if (array_filter($options["types"], $filterCallback($this->getType())) === []) {
                 return null;
             }
         }
 
-        if ($options["language"][0] !== "*") {
-            $languageMatches = array_filter($options["language"], $callbackGenerator($this->getLanguage()));
-
-            if ($languageMatches === []) {
+        // Check for `language` options.
+        if ($options["languages"][0] !== "*") {
+            if (array_filter($options["languages"], $filterCallback($this->getLanguage())) === []) {
                 return null;
             }
         }
 
+        // Last, check the `max_size` options.
         return $options["max_size"] > 0
             ? ($this->getSize() <= $options["max_size"]
                 ? $this

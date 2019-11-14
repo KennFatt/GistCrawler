@@ -2,41 +2,9 @@
 
 declare(strict_types=1);
 
-// TODO: Separate the initiator with runnable script.
+require './config.php';
 require './src/GistCrawler.php';
 require './src/GistFile.php';
-/**
- * This is only works for importing gists into a local file.
- * type: File type, such as "application/x-python", "application/x-ruby", "plain/text".
- * language: File's programming language or scripting language, started with uppercase character, such as "C", "Ruby", "Python", "PHP".
- * max_size: File size in bytes.
- *
- * TODO: Set filter options as configurable JSON file, `type` and `language` value must be an array.
- *
- * @var array $filterOptions = [
- *     "type" => [],
- *     "language" => null|[],
- *     "max_size" => int
- * ]
- */
-$filterOptions = [
-    "type" => ["text/plain"]
-];
-
-/**
- * Array argument passed to each callback.
- * Will be invoked when exact even triggered.
- *
- * @var array $callbacks = [
- *     "onInitialize" => function(["username" => string, "filter_options" => array]) {},
- *     "onFetched" => function(["response" => mixed]) {},
- *     "onExecuted" => function(["mode" => int]) {},
- *     "onFileDownloaded" => function(["file" => GistFile, "count" => int]) {},
- *     "onDirectoryCreated" => function([]) {},
- *     "onFileWritten" => function(["file" => GistFile, "file_directory" => string]) {}
- * ]
- */
-$callbacks = [];
 
 /**
  * Used to indicate invalid given username.

@@ -1,5 +1,7 @@
 # Exclude out/ folder:
 out/
+test/
+.idea/
 
 # Debugging purposes:
 dummy.json
