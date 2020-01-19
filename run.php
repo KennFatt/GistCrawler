@@ -18,6 +18,29 @@ define("ERR_INVALID_USERNAME", 0x03);
  * @var int ERR_INVALID_OPTIONS
  */
 define("ERR_INVALID_OPTIONS", 0x05);
+/**
+ * Some of requirements is missing.
+ * 
+ * @var int ERR_MISSING_EXTENSIONS
+ */
+define("ERR_MISSING_EXTENSIONS", 0x0D);
+
+/**
+ * Checking the required extensions.
+ * 
+ * @return array|string[]
+ */
+function checkExtensions() : array {
+    $requirements = ["curl"];
+    $missing = [];
+    foreach ($requirements as $ext) {
+        if (!extension_loaded($ext)) {
+            $missing[] = $ext;
+        }
+    }
+
+    return $missing;
+}
 
 /**
  * Write a message to STDOUT.
@@ -34,14 +57,18 @@ function consoleOut(string $message) : void {
 /**
  * Exit the program with optional $exitMsg and $exitCode
  * 
- * @param string|null $exitMsg
  * @param int $exitCode
+ * @param string|null $exitMsg
+ * @param Closure $callback
  */
-function programExit(?string $exitMsg = null, int $exitCode = 0) : void {
+function programExit(int $exitCode = 0, ?string $exitMsg = null, Closure $callback = null) : void {
     if ($exitMsg !== null) {
         consoleOut("[$exitCode] " . $exitMsg);
     }
-
+    if ($callback !== null) {
+        $callback();
+    }
+    
     exit($exitCode);
 }
 
@@ -85,6 +112,17 @@ function parseArgs(array $args) : ?array {
 }
 
 (function(array $args, array $filterOptions, array $callbacks) : void {
+    /**
+     * Validate the extension.
+     */
+    if (count($missing = checkExtensions()) > 0) {
+        programExit(ERR_MISSING_EXTENSIONS, null, function() use ($missing) : void {
+            foreach ($missing as $ext) {
+                consoleOut("${ext} is not loaded or installed, please try again!");
+            }
+        });
+    }
+
     $args = parseArgs($args) ?? [];
 
     /**
@@ -116,7 +154,7 @@ function parseArgs(array $args) : ?array {
     $option = trim($args[0]);
 
     if (!validateUsername($username)) {
-        programExit("Invalid github username.", ERR_INVALID_USERNAME);
+        programExit(ERR_INVALID_USERNAME, "Invalid github username.");
     }
     
     switch(strtolower($option)) {
@@ -134,7 +172,7 @@ function parseArgs(array $args) : ?array {
             break;
         default:
             $interface();
-            programExit("Invalid options given.", ERR_INVALID_OPTIONS);
+            programExit(ERR_INVALID_OPTIONS, "Invalid options given.");
             break;
     }
 
